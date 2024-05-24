@@ -1,3 +1,4 @@
+use operations::lfi_operation::LocalFileInclusionOperation;
 use operations::operation::Operation;
 use operations::rce_operation::RemoteCodeExecutionOperation;
 use operations::sqli_operation::SqlInjectionOperation;
@@ -9,6 +10,7 @@ use tree_sitter::Parser;
 use zip::ZipArchive;
 
 mod operations {
+    pub mod lfi_operation;
     pub mod operation;
     pub mod rce_operation;
     pub mod sqli_operation;
@@ -47,6 +49,7 @@ async fn process_plugin(plugin: &Value) -> Result<(), Error> {
         let operations: Vec<Box<dyn Operation>> = vec![
             Box::new(RemoteCodeExecutionOperation),
             Box::new(SqlInjectionOperation),
+            Box::new(LocalFileInclusionOperation),
         ];
         process_archive(reader, &operations)?;
     } else {
