@@ -2,22 +2,21 @@ use crate::operations::operation::{Operation, OperationResult};
 use std::collections::HashMap;
 use tree_sitter::{Query, QueryCursor, Tree};
 
-pub struct SqlInjectionOperation;
+pub struct CsrfToXssOperation;
 
-impl Operation for SqlInjectionOperation {
+impl Operation for CsrfToXssOperation {
     fn apply(&self, tree: &Tree, source_code: &str) -> OperationResult {
-        check_sql_injection(tree, source_code)
+        check_for_csrf_to_xss(tree, source_code)
     }
 
     fn name(&self) -> &str {
-        "SqlInjectionOperation"
+        "CsrfToXssOperation"
     }
 }
 
-fn check_sql_injection(tree: &Tree, source_code: &str) -> OperationResult {
+fn check_for_csrf_to_xss(tree: &Tree, source_code: &str) -> OperationResult {
     let mut functions_to_check = HashMap::new();
     let mut log = Vec::new();
-    let mut seen_calls = HashMap::new();
 
     let query = match Query::new(
         &tree.language(),
@@ -41,7 +40,6 @@ fn check_sql_injection(tree: &Tree, source_code: &str) -> OperationResult {
     for m in matches {
         let mut function_name = None;
         let mut arguments = Vec::new();
-        let mut has_dangerous_input = false;
 
         for capture in m.captures {
             let node = capture.node;
@@ -55,9 +53,6 @@ fn check_sql_injection(tree: &Tree, source_code: &str) -> OperationResult {
                     for i in 0..node.named_child_count() {
                         if let Some(arg) = node.named_child(i) {
                             if let Ok(arg_text) = arg.utf8_text(source_code.as_bytes()) {
-                                if is_dangerous_input(arg_text) {
-                                    has_dangerous_input = true;
-                                }
                                 arguments.push(arg_text.to_string());
                             }
                         }
@@ -69,33 +64,16 @@ fn check_sql_injection(tree: &Tree, source_code: &str) -> OperationResult {
 
         if let Some(function_name) = function_name {
             let function_name = function_name.to_string();
-            if has_dangerous_input && !arguments.is_empty() {
-                let args_joined = arguments.join(", ");
-                if !seen_calls.contains_key(&(function_name.clone(), args_joined.clone())) {
-                    let log_message = format!(
-                        "Function: {} | Arguments: {} | Potential SQLi vulnerability",
-                        function_name,
-                        arguments.join(", ")
-                    );
-                    functions_to_check.insert(function_name.clone(), arguments.clone());
-                    log.push((function_name.clone(), log_message));
-                    seen_calls.insert((function_name.clone(), args_joined), true);
-                }
+            if arguments.iter().any(|arg| arg.contains("$_POST")) && !arguments.iter().any(|arg| arg.contains("check_admin_referer")) {
+                let log_message = format!(
+                    "Function: {} | Arguments: {} | Potential CSRF to Stored XSS vulnerability",
+                    function_name, arguments.join(", ")
+                );
+                functions_to_check.insert(function_name.clone(), arguments.clone());
+                log.push((function_name.clone(), log_message));
             }
         }
     }
 
     (functions_to_check, log)
-}
-
-fn is_dangerous_input(argument: &str) -> bool {
-    argument.contains("$_GET")
-        || argument.contains("$_POST")
-        || argument.contains("$_REQUEST")
-        || argument.contains("$_SERVER")
-        || argument.contains("$_COOKIE")
-        || argument.contains("$_FILES")
-        || argument.contains("concat")
-        || argument.contains("join")
-        || argument.contains("interpolate")
 }

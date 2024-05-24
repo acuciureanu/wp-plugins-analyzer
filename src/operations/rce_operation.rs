@@ -1,8 +1,6 @@
-use crate::operations::operation::Operation;
+use crate::operations::operation::{Operation, OperationResult};
 use std::collections::HashMap;
 use tree_sitter::{Query, QueryCursor, Tree};
-
-use super::operation::OperationResult;
 
 pub struct RemoteCodeExecutionOperation;
 
@@ -20,13 +18,13 @@ fn check_for_rce(tree: &Tree, source_code: &str) -> OperationResult {
     let mut functions_to_check = HashMap::new();
     let mut log = Vec::new();
 
+    // Query to capture function call expressions
     let query = match Query::new(
         &tree.language(),
         r#"
-        (function_call_expression 
+        (function_call_expression
           function: (name) @function-name
           arguments: (arguments) @arguments
-          (#match? @function-name "(exec|shell_exec|system|passthru|proc_open|eval|call_user_func|call_user_func_array)")
         )
         "#,
     ) {
@@ -67,11 +65,17 @@ fn check_for_rce(tree: &Tree, source_code: &str) -> OperationResult {
 
         if let Some(function_name) = function_name {
             let function_name = function_name.to_string();
-            if !arguments.is_empty() {
+            let dangerous_functions = [
+                "exec", "shell_exec", "system", "passthru", "proc_open", "eval", "call_user_func", "call_user_func_array",
+            ];
+
+            if dangerous_functions.contains(&function_name.as_str()) {
+                let log_message = format!(
+                    "Function: {} | Arguments: {} | Potential RCE vulnerability",
+                    function_name, arguments.join(", ")
+                );
                 functions_to_check.insert(function_name.clone(), arguments.clone());
-                log.push((function_name.clone(), arguments.join(", ")));
-            } else {
-                log.push((function_name.clone(), "No arguments found".to_string()));
+                log.push((function_name.clone(), log_message));
             }
         }
     }
