@@ -17,14 +17,19 @@ impl Operation for ArbitraryFileDeletionOperation {
             )
             "#,
             |func_name| {
-                func_name == "unlink" ||
-                func_name == "rmdir" ||
-                func_name == "wp_delete_file" ||
-                func_name == "wp_delete_file_from_directory" ||
-                func_name == "WP_Filesystem_Direct::delete" ||
-                func_name == "WP_Filesystem_Direct::rmdir"
+                func_name == "unlink"
+                    || func_name == "rmdir"
+                    || func_name == "wp_delete_file"
+                    || func_name == "wp_delete_file_from_directory"
+                    || func_name == "WP_Filesystem_Direct::delete"
+                    || func_name == "WP_Filesystem_Direct::rmdir"
             },
-            |arg| arg.contains("$_GET") || arg.contains("$_POST") || arg.contains("$_REQUEST") || arg.contains("json_decode"),
+            |arg| {
+                arg.contains("$_GET")
+                    || arg.contains("$_POST")
+                    || arg.contains("$_REQUEST")
+                    || arg.contains("json_decode")
+            },
             |func_name, args| {
                 format!(
                     "Function: {} | Arguments: {} | Potential Arbitrary File Deletion vulnerability",

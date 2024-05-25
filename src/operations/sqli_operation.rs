@@ -1,4 +1,4 @@
-use crate::operations::common::check_for_function_calls;
+use super::common::check_for_function_calls;
 use crate::operations::operation::{Operation, OperationResult};
 use tree_sitter::Tree;
 
@@ -11,20 +11,22 @@ impl Operation for SqlInjectionOperation {
             source_code,
             r#"
             (function_call_expression
-                function: (name) @function-name
-                arguments: (arguments) @arguments
+              function: (name) @function-name
+              arguments: (arguments) @arguments
             )
             "#,
             |func_name| {
-                matches!(
-                    func_name,
-                    "query" | "get_results" | "get_row" | "get_var" | "prepare" | "execute"
-                )
+                func_name == "query"
+                    || func_name == "get_results"
+                    || func_name == "get_row"
+                    || func_name == "get_var"
+                    || func_name == "prepare"
+                    || func_name == "execute"
             },
-            |arg| arg.contains("$_GET") || arg.contains("$_POST") || arg.contains("concat"),
+            |arg| arg.contains("$_GET") || arg.contains("$_POST") || arg.contains("$_REQUEST"),
             |func_name, args| {
                 format!(
-                    "Function: {} | Arguments: {} | Potential SQLi vulnerability",
+                    "Function: {} | Arguments: {} | Potential SQL Injection vulnerability",
                     func_name,
                     args.join(", ")
                 )

@@ -11,28 +11,24 @@ impl Operation for RemoteCodeExecutionOperation {
             source_code,
             r#"
             (function_call_expression
-                function: (name) @function-name
-                arguments: (arguments) @arguments
+              function: (name) @function-name
+              arguments: (arguments) @arguments
             )
             "#,
             |func_name| {
-                matches!(
-                    func_name,
-                    "exec"
-                        | "shell_exec"
-                        | "system"
-                        | "passthru"
-                        | "proc_open"
-                        | "eval"
-                        | "call_user_func"
-                        | "call_user_func_array"
-                        | "create_function"
-                )
+                func_name == "exec"
+                    || func_name == "shell_exec"
+                    || func_name == "system"
+                    || func_name == "passthru"
+                    || func_name == "proc_open"
+                    || func_name == "eval"
+                    || func_name == "call_user_func"
+                    || func_name == "call_user_func_array"
             },
-            |arg| arg.contains("$_GET") || arg.contains("$_POST"),
+            |arg| arg.contains("$_GET") || arg.contains("$_POST") || arg.contains("$_REQUEST"),
             |func_name, args| {
                 format!(
-                    "Function: {} | Arguments: {} | Potential RCE vulnerability",
+                    "Function: {} | Arguments: {} | Potential Remote Code Execution vulnerability",
                     func_name,
                     args.join(", ")
                 )

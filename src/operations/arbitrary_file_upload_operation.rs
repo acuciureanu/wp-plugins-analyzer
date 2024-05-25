@@ -17,19 +17,19 @@ impl Operation for ArbitraryFileUploadOperation {
             )
             "#,
             |func_name| {
-                func_name == "move_uploaded_file" ||
-                func_name == "file_put_contents" ||
-                func_name == "fwrite" ||
-                func_name == "fputs" ||
-                func_name == "copy" ||
-                func_name == "fputcsv" ||
-                func_name == "rename" ||
-                func_name == "WP_Filesystem_Direct::put_contents" ||
-                func_name == "WP_Filesystem_Direct::move" ||
-                func_name == "WP_Filesystem_Direct::copy" ||
-                func_name == "ZipArchive::extractTo" ||
-                func_name == "PharData::extractTo" ||
-                func_name == "unzip_file"
+                func_name == "move_uploaded_file"
+                    || func_name == "file_put_contents"
+                    || func_name == "fwrite"
+                    || func_name == "fputs"
+                    || func_name == "copy"
+                    || func_name == "fputcsv"
+                    || func_name == "rename"
+                    || func_name == "WP_Filesystem_Direct::put_contents"
+                    || func_name == "WP_Filesystem_Direct::move"
+                    || func_name == "WP_Filesystem_Direct::copy"
+                    || func_name == "ZipArchive::extractTo"
+                    || func_name == "PharData::extractTo"
+                    || func_name == "unzip_file"
             },
             |arg| arg.contains("$_FILES") || arg.contains("get_file_params"),
             |func_name, args| {

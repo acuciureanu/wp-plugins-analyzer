@@ -2,9 +2,9 @@ use super::common::check_for_function_calls;
 use crate::operations::operation::{Operation, OperationResult};
 use tree_sitter::Tree;
 
-pub struct LocalFileInclusionOperation;
+pub struct PhpObjectInjectionOperation;
 
-impl Operation for LocalFileInclusionOperation {
+impl Operation for PhpObjectInjectionOperation {
     fn apply(&self, tree: &Tree, source_code: &str) -> OperationResult {
         check_for_function_calls(
             tree,
@@ -15,21 +15,11 @@ impl Operation for LocalFileInclusionOperation {
               arguments: (arguments) @arguments
             )
             "#,
-            |func_name| {
-                func_name == "include"
-                    || func_name == "include_once"
-                    || func_name == "require"
-                    || func_name == "require_once"
-            },
-            |arg| {
-                arg.contains("$_GET")
-                    || arg.contains("$_POST")
-                    || arg.contains("$_REQUEST")
-                    || arg.contains("urldecode")
-            },
+            |func_name| func_name == "unserialize",
+            |arg| arg.contains("$_GET") || arg.contains("$_POST") || arg.contains("$_REQUEST"),
             |func_name, args| {
                 format!(
-                    "Function: {} | Arguments: {} | Potential Local File Inclusion vulnerability",
+                    "Function: {} | Arguments: {} | Potential PHP Object Injection vulnerability",
                     func_name,
                     args.join(", ")
                 )
@@ -38,6 +28,6 @@ impl Operation for LocalFileInclusionOperation {
     }
 
     fn name(&self) -> &str {
-        "LocalFileInclusionOperation"
+        "PhpObjectInjectionOperation"
     }
 }

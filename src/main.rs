@@ -2,12 +2,15 @@ use operations::arbitrary_file_deletion_operation::ArbitraryFileDeletionOperatio
 use operations::arbitrary_file_read_operation::ArbitraryFileReadOperation;
 use operations::arbitrary_file_upload_operation::ArbitraryFileUploadOperation;
 use operations::broken_access_control_operation::BrokenAccessControlOperation;
-use operations::csrf_operation::CSRFProtectionOperation;
+use operations::csrf_operation::CsrfOperation;
 use operations::csrf_to_xss_operation::CsrfToXssOperation;
 use operations::lfi_operation::LocalFileInclusionOperation;
 use operations::operation::Operation;
+use operations::php_object_injection::PhpObjectInjectionOperation;
+use operations::privilege_escalation_operation::PrivilegeEscalationOperation;
 use operations::rce_operation::RemoteCodeExecutionOperation;
 use operations::sqli_operation::SqlInjectionOperation;
+use operations::ssrf_operation::ServerSideRequestForgeryOperation;
 use reqwest::Error;
 use serde_json::Value;
 use std::borrow::Cow;
@@ -25,8 +28,11 @@ mod operations {
     pub mod csrf_to_xss_operation;
     pub mod lfi_operation;
     pub mod operation;
+    pub mod php_object_injection;
+    pub mod privilege_escalation_operation;
     pub mod rce_operation;
     pub mod sqli_operation;
+    pub mod ssrf_operation;
 }
 
 async fn get_plugin_info(url: &str) -> Result<(), Error> {
@@ -60,15 +66,18 @@ async fn process_plugin(plugin: &Value) -> Result<(), Error> {
         let data = download_plugin(download_link).await?;
         let reader = Cursor::new(data);
         let operations: Vec<Box<dyn Operation>> = vec![
-            Box::new(CsrfToXssOperation),
-            Box::new(LocalFileInclusionOperation),
-            Box::new(RemoteCodeExecutionOperation),
-            Box::new(SqlInjectionOperation),
             Box::new(ArbitraryFileDeletionOperation),
             Box::new(ArbitraryFileReadOperation),
             Box::new(ArbitraryFileUploadOperation),
             Box::new(BrokenAccessControlOperation),
-            Box::new(CSRFProtectionOperation),
+            Box::new(CsrfOperation),
+            Box::new(CsrfToXssOperation),
+            Box::new(LocalFileInclusionOperation),
+            Box::new(PhpObjectInjectionOperation),
+            Box::new(PrivilegeEscalationOperation),
+            Box::new(RemoteCodeExecutionOperation),
+            Box::new(SqlInjectionOperation),
+            Box::new(ServerSideRequestForgeryOperation),
         ];
         process_archive(reader, &operations)?;
     } else {

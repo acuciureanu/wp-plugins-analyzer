@@ -2,9 +2,9 @@ use super::common::check_for_function_calls;
 use crate::operations::operation::{Operation, OperationResult};
 use tree_sitter::Tree;
 
-pub struct LocalFileInclusionOperation;
+pub struct PrivilegeEscalationOperation;
 
-impl Operation for LocalFileInclusionOperation {
+impl Operation for PrivilegeEscalationOperation {
     fn apply(&self, tree: &Tree, source_code: &str) -> OperationResult {
         check_for_function_calls(
             tree,
@@ -16,20 +16,14 @@ impl Operation for LocalFileInclusionOperation {
             )
             "#,
             |func_name| {
-                func_name == "include"
-                    || func_name == "include_once"
-                    || func_name == "require"
-                    || func_name == "require_once"
+                func_name == "current_user_can"
+                    || func_name == "user_can"
+                    || func_name == "wp_get_current_user"
             },
-            |arg| {
-                arg.contains("$_GET")
-                    || arg.contains("$_POST")
-                    || arg.contains("$_REQUEST")
-                    || arg.contains("urldecode")
-            },
+            |arg| arg.contains("$_GET") || arg.contains("$_POST"),
             |func_name, args| {
                 format!(
-                    "Function: {} | Arguments: {} | Potential Local File Inclusion vulnerability",
+                    "Function: {} | Arguments: {} | Potential Privilege Escalation vulnerability",
                     func_name,
                     args.join(", ")
                 )
@@ -38,6 +32,6 @@ impl Operation for LocalFileInclusionOperation {
     }
 
     fn name(&self) -> &str {
-        "LocalFileInclusionOperation"
+        "PrivilegeEscalationOperation"
     }
 }
