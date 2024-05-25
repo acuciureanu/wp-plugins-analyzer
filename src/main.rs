@@ -14,11 +14,12 @@ use operations::ssrf_operation::ServerSideRequestForgeryOperation;
 use reqwest::Error;
 use serde_json::Value;
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::io::{Cursor, Read};
-use tree_sitter::Parser;
-use zip::ZipArchive;
-use tokio::task::spawn_blocking;
 use std::sync::Arc;
+use tree_sitter::Parser;
+use tokio::task::spawn_blocking;
+use zip::ZipArchive;
 
 mod operations {
     pub mod arbitrary_file_deletion_operation;
@@ -158,15 +159,20 @@ async fn process_file(
             handles.push(handle);
         }
 
+        let mut unique_results = HashSet::new();
+
         for handle in handles {
             match handle.await {
                 Ok(result) => {
                     let (operation_name, log) = result;
                     for (_, log_message) in log {
-                        println!(
+                        let formatted_message = format!(
                             "File: {} | Operation: {} | {}",
                             file_name, operation_name, log_message
                         );
+                        if !log_message.is_empty() && unique_results.insert(formatted_message.clone()) {
+                            println!("{}", formatted_message);
+                        }
                     }
                 }
                 Err(e) => {

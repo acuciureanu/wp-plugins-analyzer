@@ -20,7 +20,7 @@ impl Operation for CsrfOperation {
                         && !source_code.contains("wp_verify_nonce")
                         && !source_code.contains("check_admin_referer")
                         && !source_code.contains("check_ajax_referer")
-                        && (arg.contains("[") || arg.contains(","))
+                        && (arg.contains('[') || arg.contains(','))
                     {
                         logs.push(format!(
                             "Function: {} | Arguments: {} | Potential CSRF Vulnerability: Missing Nonce Verification",
@@ -28,13 +28,6 @@ impl Operation for CsrfOperation {
                             args.join(", ")
                         ));
                     }
-                }
-                if logs.is_empty() {
-                    logs.push(format!(
-                        "Function: {} | Arguments: {} | No obvious CSRF vulnerability detected, but verify if proper security checks are in place.",
-                        func_name,
-                        args.join(", ")
-                    ));
                 }
                 logs.join("\n")
             },
