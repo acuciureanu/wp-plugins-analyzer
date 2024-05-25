@@ -20,16 +20,25 @@ impl Operation for CsrfOperation {
             |func_name, args| {
                 let mut logs = vec![];
                 for arg in &args {
-                    if arg.contains("init")
-                        || arg.contains("admin_init")
-                        || arg.contains("wp_ajax_")
-                    {
-                        logs.push(format!(
-                            "Function: {} | Arguments: {} | Potential CSRF Vulnerability",
-                            func_name,
-                            args.join(", ")
-                        ));
+                    if arg.contains("init") || arg.contains("admin_init") || arg.contains("wp_ajax_") {
+                        if !source_code.contains("wp_verify_nonce")
+                            && !source_code.contains("check_admin_referer")
+                            && !source_code.contains("check_ajax_referer")
+                        {
+                            logs.push(format!(
+                                "Function: {} | Arguments: {} | Potential CSRF Vulnerability: Missing Nonce Verification",
+                                func_name,
+                                args.join(", ")
+                            ));
+                        }
                     }
+                }
+                if logs.is_empty() {
+                    logs.push(format!(
+                        "Function: {} | Arguments: {} | No obvious CSRF vulnerability detected, but verify if proper security checks are in place.",
+                        func_name,
+                        args.join(", ")
+                    ));
                 }
                 logs.join("\n")
             },
