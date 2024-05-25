@@ -1,8 +1,8 @@
+use operations::csrf_to_xss_operation::CsrfToXssOperation;
 use operations::lfi_operation::LocalFileInclusionOperation;
 use operations::operation::Operation;
 use operations::rce_operation::RemoteCodeExecutionOperation;
 use operations::sqli_operation::SqlInjectionOperation;
-use operations::csrf_to_xss_operation::CsrfToXssOperation;
 use reqwest::Error;
 use serde_json::Value;
 use std::borrow::Cow;
@@ -11,11 +11,12 @@ use tree_sitter::Parser;
 use zip::ZipArchive;
 
 mod operations {
+    pub mod common;
+    pub mod csrf_to_xss_operation;
     pub mod lfi_operation;
     pub mod operation;
     pub mod rce_operation;
     pub mod sqli_operation;
-    pub mod csrf_to_xss_operation;
 }
 
 async fn get_plugin_info(url: &str) -> Result<(), Error> {
@@ -49,10 +50,10 @@ async fn process_plugin(plugin: &Value) -> Result<(), Error> {
         let data = download_plugin(download_link).await?;
         let reader = Cursor::new(data);
         let operations: Vec<Box<dyn Operation>> = vec![
+            Box::new(CsrfToXssOperation),
+            Box::new(LocalFileInclusionOperation),
             Box::new(RemoteCodeExecutionOperation),
             Box::new(SqlInjectionOperation),
-            Box::new(LocalFileInclusionOperation),
-            Box::new(CsrfToXssOperation),
         ];
         process_archive(reader, &operations)?;
     } else {
