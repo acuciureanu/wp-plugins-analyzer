@@ -9,23 +9,17 @@ impl Operation for BrokenAccessControlOperation {
         check_for_function_calls(
             tree,
             source_code,
-            r#"
-            (function_call_expression
-              function: (name) @function-name
-              arguments: (arguments) @arguments
-            )
-            "#,
-            |func_name| {
-                func_name == "add_action"
-                    || func_name == "update_option"
-                    || func_name == "register_rest_route"
-            },
-            |arg| {
-                arg.contains("current_user_can")
-                    || arg.contains("wp_verify_nonce")
-                    || arg.contains("check_admin_referer")
-                    || arg.contains("check_ajax_referer")
-            },
+            &[
+                "add_action",
+                "update_option",
+                "register_rest_route",
+            ],
+            &[
+                "current_user_can",
+                "wp_verify_nonce",
+                "check_admin_referer",
+                "check_ajax_referer",
+            ],
             |func_name, args| {
                 format!(
                     "Function: {} | Arguments: {} | Potential Broken Access Control vulnerability",

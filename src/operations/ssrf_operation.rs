@@ -9,20 +9,14 @@ impl Operation for ServerSideRequestForgeryOperation {
         check_for_function_calls(
             tree,
             source_code,
-            r#"
-            (function_call_expression
-              function: (name) @function-name
-              arguments: (arguments) @arguments
-            )
-            "#,
-            |func_name| {
-                func_name == "wp_remote_get"
-                    || func_name == "wp_remote_post"
-                    || func_name == "file_get_contents"
-                    || func_name == "fopen"
-                    || func_name == "curl_exec"
-            },
-            |arg| arg.contains("$_GET") || arg.contains("$_POST") || arg.contains("$_REQUEST"),
+            &[
+                "wp_remote_get",
+                "wp_remote_post",
+                "file_get_contents",
+                "fopen",
+                "curl_exec",
+            ],
+            &["$_GET", "$_POST", "$_REQUEST"],
             |func_name, args| {
                 format!(
                     "Function: {} | Arguments: {} | Potential Server-Side Request Forgery vulnerability",

@@ -10,26 +10,20 @@ impl Operation for ArbitraryFileDeletionOperation {
         check_for_function_calls(
             tree,
             source_code,
-            r#"
-            (function_call_expression
-              function: (name) @function-name
-              arguments: (arguments) @arguments
-            )
-            "#,
-            |func_name| {
-                func_name == "unlink"
-                    || func_name == "rmdir"
-                    || func_name == "wp_delete_file"
-                    || func_name == "wp_delete_file_from_directory"
-                    || func_name == "WP_Filesystem_Direct::delete"
-                    || func_name == "WP_Filesystem_Direct::rmdir"
-            },
-            |arg| {
-                arg.contains("$_GET")
-                    || arg.contains("$_POST")
-                    || arg.contains("$_REQUEST")
-                    || arg.contains("json_decode")
-            },
+            &[
+                "unlink",
+                "rmdir",
+                "wp_delete_file",
+                "wp_delete_file_from_directory",
+                "WP_Filesystem_Direct::delete",
+                "WP_Filesystem_Direct::rmdir",
+            ],
+            &[
+                "$_GET",
+                "$_POST",
+                "$_REQUEST",
+                "json_decode",
+            ],
             |func_name, args| {
                 format!(
                     "Function: {} | Arguments: {} | Potential Arbitrary File Deletion vulnerability",

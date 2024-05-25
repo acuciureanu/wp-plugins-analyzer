@@ -9,21 +9,15 @@ impl Operation for SqlInjectionOperation {
         check_for_function_calls(
             tree,
             source_code,
-            r#"
-            (function_call_expression
-              function: (name) @function-name
-              arguments: (arguments) @arguments
-            )
-            "#,
-            |func_name| {
-                func_name == "query"
-                    || func_name == "get_results"
-                    || func_name == "get_row"
-                    || func_name == "get_var"
-                    || func_name == "prepare"
-                    || func_name == "execute"
-            },
-            |arg| arg.contains("$_GET") || arg.contains("$_POST") || arg.contains("$_REQUEST"),
+            &[
+                "query",
+                "get_results",
+                "get_row",
+                "get_var",
+                "prepare",
+                "execute",
+            ],
+            &["$_GET", "$_POST", "$_REQUEST"],
             |func_name, args| {
                 format!(
                     "Function: {} | Arguments: {} | Potential SQL Injection vulnerability",

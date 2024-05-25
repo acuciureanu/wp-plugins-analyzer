@@ -9,14 +9,8 @@ impl Operation for PhpObjectInjectionOperation {
         check_for_function_calls(
             tree,
             source_code,
-            r#"
-            (function_call_expression
-              function: (name) @function-name
-              arguments: (arguments) @arguments
-            )
-            "#,
-            |func_name| func_name == "unserialize",
-            |arg| arg.contains("$_GET") || arg.contains("$_POST") || arg.contains("$_REQUEST"),
+            &["unserialize"],
+            &["$_GET", "$_POST", "$_REQUEST"],
             |func_name, args| {
                 format!(
                     "Function: {} | Arguments: {} | Potential PHP Object Injection vulnerability",

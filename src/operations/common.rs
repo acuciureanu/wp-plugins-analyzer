@@ -6,8 +6,8 @@ use super::operation::OperationResult;
 /**
 Checks for function calls in the given source code that match the specified query.
 
-This function takes a syntax tree, source code, query string, function check closure,
-argument check closure, and log message closure as input. It searches for function calls
+This function takes a syntax tree, source code, query string, array of function names,
+array of argument checks, and log message closure as input. It searches for function calls
 in the source code that match the query and satisfy the function check and argument check
 conditions. For each matching function call, it adds the function name and arguments to
 a HashMap and logs a message using the log message closure.
@@ -16,11 +16,8 @@ a HashMap and logs a message using the log message closure.
 
 * `tree` - The syntax tree of the source code.
 * `source_code` - The source code as a string.
-* `query_str` - The query string used for searching.
-* `function_check` - A closure that takes a function name as input and returns a boolean
-                     indicating whether the function should be checked.
-* `arg_check` - A closure that takes an argument as input and returns a boolean indicating
-                whether the argument is considered dangerous.
+* `function_names` - A slice of function names to check.
+* `arg_checks` - A slice of strings that should be checked in arguments.
 * `log_message` - A closure that takes a function name and a vector of arguments as input
                   and returns a log message as a string.
 
@@ -28,23 +25,27 @@ a HashMap and logs a message using the log message closure.
 
 A tuple containing a HashMap of functions to check and a vector of log messages.
 */
-pub fn check_for_function_calls<F, G, H>(
+pub fn check_for_function_calls<H>(
     tree: &Tree,
     source_code: &str,
-    query_str: &str,
-    function_check: F,
-    arg_check: G,
+    function_names: &[&str],
+    arg_checks: &[&str],
     log_message: H,
 ) -> OperationResult
 where
-    F: Fn(&str) -> bool,
-    G: Fn(&str) -> bool,
     H: Fn(&str, Vec<String>) -> String,
 {
     let mut functions_to_check = HashMap::new();
     let mut log = Vec::new();
 
     // Represents the query used for searching.
+    let query_str = r#"
+    (function_call_expression
+      function: (name) @function-name
+      arguments: (arguments) @arguments
+    )
+    "#;
+
     let query = match Query::new(&tree.language(), query_str) {
         Ok(query) => query,
         Err(e) => {
@@ -73,7 +74,7 @@ where
                     for i in 0..node.named_child_count() {
                         if let Some(arg) = node.named_child(i) {
                             if let Ok(arg_text) = arg.utf8_text(source_code.as_bytes()) {
-                                if arg_check(arg_text) {
+                                if arg_checks.iter().any(|&check| arg_text.contains(check)) {
                                     has_dangerous_input = true;
                                 }
                                 arguments.push(arg_text.to_string());
@@ -87,7 +88,7 @@ where
 
         if let Some(function_name) = function_name {
             let function_name = function_name.to_string();
-            if function_check(&function_name) && has_dangerous_input && !arguments.is_empty() {
+            if function_names.contains(&function_name.as_str()) && has_dangerous_input && !arguments.is_empty() {
                 functions_to_check.insert(function_name.clone(), arguments.clone());
                 log.push((
                     function_name.clone(),

@@ -10,20 +10,29 @@ impl Operation for CsrfToXssOperation {
         check_for_function_calls(
             tree,
             source_code,
-            r#"
-            (function_call_expression
-              function: (name) @function-name
-              arguments: (arguments) @arguments
-            )
-            "#,
-            |func_name| func_name == "wp_update_post" || func_name == "update_option",
-            |arg| arg.contains("$_POST") && !arg.contains("wp_nonce_field"),
+            &["wp_update_post", "update_option", "add_post_meta", "update_post_meta"],
+            &["$_POST"],
             |func_name, args| {
-                format!(
-                    "Function: {} | Arguments: {} | Potential CSRF to Stored XSS vulnerability",
-                    func_name,
-                    args.join(", ")
-                )
+                let mut logs = vec![];
+                let has_nonce_check = source_code.contains("wp_nonce_field")
+                    || source_code.contains("check_admin_referer")
+                    || source_code.contains("check_ajax_referer");
+
+                if !has_nonce_check {
+                    logs.push(format!(
+                        "Function: {} | Arguments: {} | Potential CSRF to Stored XSS vulnerability: Missing Nonce Verification",
+                        func_name,
+                        args.join(", ")
+                    ));
+                } else {
+                    logs.push(format!(
+                        "Function: {} | Arguments: {} | No obvious CSRF to Stored XSS vulnerability detected, but verify if proper security checks are in place.",
+                        func_name,
+                        args.join(", ")
+                    ));
+                }
+
+                logs.join("\n")
             },
         )
     }

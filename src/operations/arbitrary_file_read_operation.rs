@@ -10,26 +10,24 @@ impl Operation for ArbitraryFileReadOperation {
         check_for_function_calls(
             tree,
             source_code,
-            r#"
-            (function_call_expression
-              function: (name) @function-name
-              arguments: (arguments) @arguments
-            )
-            "#,
-            |func_name| {
-                func_name == "file_get_contents"
-                    || func_name == "fopen"
-                    || func_name == "readfile"
-                    || func_name == "fread"
-                    || func_name == "file"
-                    || func_name == "fgets"
-                    || func_name == "fgetcsv"
-                    || func_name == "fgetss"
-                    || func_name == "curl_exec"
-                    || func_name == "WP_Filesystem_Direct::get_contents"
-                    || func_name == "WP_Filesystem_Direct::get_contents_array"
-            },
-            |arg| arg.contains("$_GET") || arg.contains("$_POST") || arg.contains("$_REQUEST"),
+            &[
+                "file_get_contents",
+                "fopen",
+                "readfile",
+                "fread",
+                "file",
+                "fgets",
+                "fgetcsv",
+                "fgetss",
+                "curl_exec",
+                "WP_Filesystem_Direct::get_contents",
+                "WP_Filesystem_Direct::get_contents_array",
+            ],
+            &[
+                "$_GET",
+                "$_POST",
+                "$_REQUEST",
+            ],
             |func_name, args| {
                 format!(
                     "Function: {} | Arguments: {} | Potential Arbitrary File Read vulnerability",

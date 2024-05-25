@@ -17,6 +17,8 @@ use std::borrow::Cow;
 use std::io::{Cursor, Read};
 use tree_sitter::Parser;
 use zip::ZipArchive;
+use tokio::task::spawn_blocking;
+use std::sync::Arc;
 
 mod operations {
     pub mod arbitrary_file_deletion_operation;
@@ -65,21 +67,21 @@ async fn process_plugin(plugin: &Value) -> Result<(), Error> {
     if let Some(download_link) = plugin["download_link"].as_str() {
         let data = download_plugin(download_link).await?;
         let reader = Cursor::new(data);
-        let operations: Vec<Box<dyn Operation>> = vec![
-            Box::new(ArbitraryFileDeletionOperation),
-            Box::new(ArbitraryFileReadOperation),
-            Box::new(ArbitraryFileUploadOperation),
-            Box::new(BrokenAccessControlOperation),
-            Box::new(CsrfOperation),
-            Box::new(CsrfToXssOperation),
-            Box::new(LocalFileInclusionOperation),
-            Box::new(PhpObjectInjectionOperation),
-            Box::new(PrivilegeEscalationOperation),
-            Box::new(RemoteCodeExecutionOperation),
-            Box::new(SqlInjectionOperation),
-            Box::new(ServerSideRequestForgeryOperation),
+        let operations: Vec<Arc<dyn Operation + Send + Sync>> = vec![
+            Arc::new(ArbitraryFileDeletionOperation),
+            Arc::new(ArbitraryFileReadOperation),
+            Arc::new(ArbitraryFileUploadOperation),
+            Arc::new(BrokenAccessControlOperation),
+            Arc::new(CsrfOperation),
+            Arc::new(CsrfToXssOperation),
+            Arc::new(LocalFileInclusionOperation),
+            Arc::new(PhpObjectInjectionOperation),
+            Arc::new(PrivilegeEscalationOperation),
+            Arc::new(RemoteCodeExecutionOperation),
+            Arc::new(SqlInjectionOperation),
+            Arc::new(ServerSideRequestForgeryOperation),
         ];
-        process_archive(reader, &operations)?;
+        process_archive(reader, &operations).await?;
     } else {
         eprintln!("Download link not found for plugin: {:?}", plugin);
     }
@@ -94,9 +96,9 @@ async fn download_plugin(download_link: &str) -> Result<Vec<u8>, Error> {
     Ok(data.to_vec())
 }
 
-fn process_archive(
+async fn process_archive(
     reader: Cursor<Vec<u8>>,
-    operations: &[Box<dyn Operation>],
+    operations: &[Arc<dyn Operation + Send + Sync>],
 ) -> Result<(), Error> {
     let mut archive = match ZipArchive::new(reader) {
         Ok(archive) => archive,
@@ -107,7 +109,7 @@ fn process_archive(
     };
 
     for i in 0..archive.len() {
-        let mut file = match archive.by_index(i) {
+        let file = match archive.by_index(i) {
             Ok(file) => file,
             Err(e) => {
                 eprintln!("Failed to access file at index {}: {:?}", i, e);
@@ -116,16 +118,16 @@ fn process_archive(
         };
 
         if file.is_file() && file.name().ends_with(".php") {
-            process_file(&mut file, operations)?;
+            process_file(file, operations).await?;
         }
     }
 
     Ok(())
 }
 
-fn process_file(
-    file: &mut zip::read::ZipFile,
-    operations: &[Box<dyn Operation>],
+async fn process_file(
+    mut file: zip::read::ZipFile<'_>,
+    operations: &[Arc<dyn Operation + Send + Sync>],
 ) -> Result<(), Error> {
     let file_name = file.name().to_string();
     if file_name.ends_with(".php") {
@@ -135,20 +137,41 @@ fn process_file(
             return Ok(());
         }
 
-        let source_code = String::from_utf8_lossy(&buffer);
+        let source_code = Arc::new(String::from_utf8_lossy(&buffer).to_string());
         let source_code_bytes: Cow<[u8]> = Cow::Borrowed(source_code.as_bytes());
         let mut parser = initialize_parser();
-        let tree = parser.parse(source_code_bytes, None).unwrap();
+        let tree = Arc::new(parser.parse(source_code_bytes, None).unwrap());
+
+        let mut handles = vec![];
 
         for operation in operations {
-            let (_, log) = operation.apply(&tree, &source_code);
-            for (_, log_message) in &log {
-                println!(
-                    "File: {} | Operation: {} | {}",
-                    file_name,
-                    operation.name(),
-                    log_message
-                );
+            let tree_clone = Arc::clone(&tree);
+            let source_code_clone = Arc::clone(&source_code);
+            let operation = Arc::clone(operation);
+            let operation_name = operation.name().to_string();
+
+            let handle = spawn_blocking(move || {
+                let (_, log) = operation.apply(&tree_clone, &source_code_clone);
+                (operation_name, log)
+            });
+
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            match handle.await {
+                Ok(result) => {
+                    let (operation_name, log) = result;
+                    for (_, log_message) in log {
+                        println!(
+                            "File: {} | Operation: {} | {}",
+                            file_name, operation_name, log_message
+                        );
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error occurred while awaiting handle: {:?}", e);
+                }
             }
         }
     }
@@ -166,7 +189,7 @@ fn initialize_parser() -> Parser {
 
 #[tokio::main]
 async fn main() {
-    let stack_size = 16 * 1024 * 1024; // 16 MB
+    let stack_size = 128 * 1024 * 1024; // 128 MB
     let builder = std::thread::Builder::new().stack_size(stack_size);
     builder
         .spawn(move || {

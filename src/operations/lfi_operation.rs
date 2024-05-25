@@ -9,24 +9,8 @@ impl Operation for LocalFileInclusionOperation {
         check_for_function_calls(
             tree,
             source_code,
-            r#"
-            (function_call_expression
-              function: (name) @function-name
-              arguments: (arguments) @arguments
-            )
-            "#,
-            |func_name| {
-                func_name == "include"
-                    || func_name == "include_once"
-                    || func_name == "require"
-                    || func_name == "require_once"
-            },
-            |arg| {
-                arg.contains("$_GET")
-                    || arg.contains("$_POST")
-                    || arg.contains("$_REQUEST")
-                    || arg.contains("urldecode")
-            },
+            &["include", "include_once", "require", "require_once"],
+            &["$_GET", "$_POST", "$_REQUEST", "urldecode"],
             |func_name, args| {
                 format!(
                     "Function: {} | Arguments: {} | Potential Local File Inclusion vulnerability",
