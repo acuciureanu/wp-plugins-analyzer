@@ -1,3 +1,8 @@
+use operations::arbitrary_file_deletion_operation::ArbitraryFileDeletionOperation;
+use operations::arbitrary_file_read_operation::ArbitraryFileReadOperation;
+use operations::arbitrary_file_upload_operation::ArbitraryFileUploadOperation;
+use operations::broken_access_control_operation::BrokenAccessControlOperation;
+use operations::csrf_operation::CSRFProtectionOperation;
 use operations::csrf_to_xss_operation::CsrfToXssOperation;
 use operations::lfi_operation::LocalFileInclusionOperation;
 use operations::operation::Operation;
@@ -11,7 +16,12 @@ use tree_sitter::Parser;
 use zip::ZipArchive;
 
 mod operations {
+    pub mod arbitrary_file_deletion_operation;
+    pub mod arbitrary_file_read_operation;
+    pub mod arbitrary_file_upload_operation;
+    pub mod broken_access_control_operation;
     pub mod common;
+    pub mod csrf_operation;
     pub mod csrf_to_xss_operation;
     pub mod lfi_operation;
     pub mod operation;
@@ -54,6 +64,11 @@ async fn process_plugin(plugin: &Value) -> Result<(), Error> {
             Box::new(LocalFileInclusionOperation),
             Box::new(RemoteCodeExecutionOperation),
             Box::new(SqlInjectionOperation),
+            Box::new(ArbitraryFileDeletionOperation),
+            Box::new(ArbitraryFileReadOperation),
+            Box::new(ArbitraryFileUploadOperation),
+            Box::new(BrokenAccessControlOperation),
+            Box::new(CSRFProtectionOperation),
         ];
         process_archive(reader, &operations)?;
     } else {

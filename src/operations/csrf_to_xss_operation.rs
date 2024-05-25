@@ -16,11 +16,8 @@ impl Operation for CsrfToXssOperation {
               arguments: (arguments) @arguments
             )
             "#,
-            |func_name| func_name == "isset",
-            |arg| {
-                arg.contains("$_POST") && !arg.contains("check_admin_referer") && 
-                (arg.contains("add_action") || arg.contains("admin_action"))
-            },
+            |func_name| func_name == "wp_update_post" || func_name == "update_option",
+            |arg| arg.contains("$_POST") && !arg.contains("wp_nonce_field"),
             |func_name, args| {
                 format!(
                     "Function: {} | Arguments: {} | Potential CSRF to Stored XSS vulnerability",
