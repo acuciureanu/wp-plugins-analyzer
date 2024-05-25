@@ -133,13 +133,12 @@ fn process_file(
 
         for operation in operations {
             let (_, log) = operation.apply(&tree, &source_code);
-            for (func_name, args) in &log {
+            for (_, log_message) in &log {
                 println!(
-                    "File: {} | Operation: {} | Function name: {} | Args: {}",
+                    "File: {} | Operation: {} | {}",
                     file_name,
                     operation.name(),
-                    func_name,
-                    args
+                    log_message
                 );
             }
         }
