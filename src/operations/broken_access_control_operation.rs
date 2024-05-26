@@ -1,36 +1,26 @@
-use super::common::check_for_function_calls;
-use crate::operations::operation::{Operation, OperationResult};
-use tree_sitter::Tree;
+use super::operation::Operation;
 
 pub struct BrokenAccessControlOperation;
 
 impl Operation for BrokenAccessControlOperation {
-    fn apply(&self, tree: &Tree, source_code: &str) -> OperationResult {
-        check_for_function_calls(
-            tree,
-            source_code,
-            &[
-                "add_action",
-                "update_option",
-                "register_rest_route",
-            ],
-            &[
-                "current_user_can",
-                "wp_verify_nonce",
-                "check_admin_referer",
-                "check_ajax_referer",
-            ],
-            |func_name, args| {
-                format!(
-                    "Function: {} | Arguments: {} | Potential Broken Access Control vulnerability",
-                    func_name,
-                    args.join(", ")
-                )
-            },
-        )
+    fn name(&self) -> &str {
+        "Broken Access Control Operation"
     }
 
-    fn name(&self) -> &str {
-        "BrokenAccessControlOperation"
+    fn functions_checks(&self) -> Vec<&'static str> {
+        vec![
+            "add_action",
+            "update_option",
+            "register_rest_route",
+        ]
+    }
+
+    fn args_checks(&self) -> Vec<&'static str> {
+        vec![
+            "current_user_can",
+            "wp_verify_nonce",
+            "check_admin_referer",
+            "check_ajax_referer",
+        ]
     }
 }

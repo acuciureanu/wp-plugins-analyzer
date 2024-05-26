@@ -1,27 +1,17 @@
-use super::common::check_for_function_calls;
-use crate::operations::operation::{Operation, OperationResult};
-use tree_sitter::Tree;
+use crate::operations::operation::Operation;
 
 pub struct LocalFileInclusionOperation;
 
 impl Operation for LocalFileInclusionOperation {
-    fn apply(&self, tree: &Tree, source_code: &str) -> OperationResult {
-        check_for_function_calls(
-            tree,
-            source_code,
-            &["include", "include_once", "require", "require_once"],
-            &["$_GET", "$_POST", "$_REQUEST", "urldecode"],
-            |func_name, args| {
-                format!(
-                    "Function: {} | Arguments: {} | Potential Local File Inclusion vulnerability",
-                    func_name,
-                    args.join(", ")
-                )
-            },
-        )
+    fn name(&self) -> &str {
+        "Local File Inclusion Operation"
     }
 
-    fn name(&self) -> &str {
-        "LocalFileInclusionOperation"
+    fn functions_checks(&self) -> Vec<&'static str> {
+        vec!["include", "include_once", "require", "require_once"]
+    }
+
+    fn args_checks(&self) -> Vec<&'static str> {
+        vec!["$_GET", "$_POST", "$_REQUEST", "urldecode"]
     }
 }

@@ -17,8 +17,8 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::io::{Cursor, Read};
 use std::sync::Arc;
-use tree_sitter::Parser;
 use tokio::task::spawn_blocking;
+use tree_sitter::Parser;
 use zip::ZipArchive;
 
 mod operations {
@@ -26,7 +26,6 @@ mod operations {
     pub mod arbitrary_file_read_operation;
     pub mod arbitrary_file_upload_operation;
     pub mod broken_access_control_operation;
-    pub mod common;
     pub mod csrf_operation;
     pub mod csrf_to_xss_operation;
     pub mod lfi_operation;
@@ -170,7 +169,9 @@ async fn process_file(
                             "File: {} | Operation: {} | {}",
                             file_name, operation_name, log_message
                         );
-                        if !log_message.is_empty() && unique_results.insert(formatted_message.clone()) {
+                        if !log_message.is_empty()
+                            && unique_results.insert(formatted_message.clone())
+                        {
                             println!("{}", formatted_message);
                         }
                     }
