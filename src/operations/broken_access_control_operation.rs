@@ -8,11 +8,7 @@ impl Operation for BrokenAccessControlOperation {
     }
 
     fn functions_checks(&self) -> Vec<&'static str> {
-        vec![
-            "add_action",
-            "update_option",
-            "register_rest_route",
-        ]
+        vec!["add_action", "update_option", "register_rest_route"]
     }
 
     fn args_checks(&self) -> Vec<&'static str> {

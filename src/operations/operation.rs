@@ -25,7 +25,11 @@ pub trait Operation {
     }
 
     fn format_log_message(&self, func_name: &str, args: Vec<String>) -> String {
-        let has_excluded_args = args.iter().any(|arg| self.exclude_args_checks().iter().any(|&check| arg.contains(check)));
+        let has_excluded_args = args.iter().any(|arg| {
+            self.exclude_args_checks()
+                .iter()
+                .any(|&check| arg.contains(check))
+        });
         if has_excluded_args {
             format!(
                 "Function: {} | Arguments: {} | No obvious {} vulnerability detected, but verify if proper security checks are in place.",
@@ -107,7 +111,9 @@ where
 
         if let Some(function_name) = function_name {
             let function_name = function_name.to_string();
-            let contains_exclusion = exclusion_arg_checks.iter().any(|&check| source_code.contains(check));
+            let contains_exclusion = exclusion_arg_checks
+                .iter()
+                .any(|&check| source_code.contains(check));
             if function_names.contains(&function_name.as_str())
                 && has_dangerous_input
                 && !arguments.is_empty()

@@ -24,10 +24,6 @@ impl Operation for ArbitraryFileReadOperation {
     }
 
     fn args_checks(&self) -> Vec<&'static str> {
-        vec![
-            "$_GET",
-            "$_POST",
-            "$_REQUEST",
-        ]
+        vec!["$_GET", "$_POST", "$_REQUEST"]
     }
 }

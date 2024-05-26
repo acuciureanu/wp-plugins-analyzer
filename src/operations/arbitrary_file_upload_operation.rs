@@ -26,9 +26,6 @@ impl Operation for ArbitraryFileUploadOperation {
     }
 
     fn args_checks(&self) -> Vec<&'static str> {
-        vec![
-            "$_FILES",
-            "get_file_params",
-        ]
+        vec!["$_FILES", "get_file_params"]
     }
 }

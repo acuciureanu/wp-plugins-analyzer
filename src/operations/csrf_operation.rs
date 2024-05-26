@@ -16,6 +16,10 @@ impl Operation for CsrfOperation {
     }
 
     fn exclude_args_checks(&self) -> Vec<&'static str> {
-        vec!["wp_verify_nonce", "check_admin_referer", "check_ajax_referer"]
+        vec![
+            "wp_verify_nonce",
+            "check_admin_referer",
+            "check_ajax_referer",
+        ]
     }
 }
