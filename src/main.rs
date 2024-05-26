@@ -1,3 +1,5 @@
+use api::client::{fetch_all_plugins, load_snapshot, save_snapshot};
+use models::plugin::Plugin;
 use operations::arbitrary_file_deletion_operation::ArbitraryFileDeletionOperation;
 use operations::arbitrary_file_read_operation::ArbitraryFileReadOperation;
 use operations::arbitrary_file_upload_operation::ArbitraryFileUploadOperation;
@@ -12,14 +14,27 @@ use operations::rce_operation::RemoteCodeExecutionOperation;
 use operations::sqli_operation::SqlInjectionOperation;
 use operations::ssrf_operation::ServerSideRequestForgeryOperation;
 use reqwest::Error;
-use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::io::{Cursor, Read};
+use std::path::Path;
 use std::sync::Arc;
 use tokio::task::spawn_blocking;
 use tree_sitter::Parser;
+use utils::comparator::compare_snapshots;
 use zip::ZipArchive;
+
+mod api {
+    pub mod client;
+}
+
+mod models {
+    pub mod plugin;
+}
+
+mod utils {
+    pub mod comparator;
+}
 
 mod operations {
     pub mod arbitrary_file_deletion_operation;
@@ -37,34 +52,28 @@ mod operations {
     pub mod ssrf_operation;
 }
 
-async fn get_plugin_info(url: &str) -> Result<(), Error> {
-    let plugins = fetch_plugins(url).await?;
-    if plugins.is_empty() {
-        eprintln!("No plugins found");
-        return Ok(());
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let new_data = fetch_all_plugins().await?;
+
+    if Path::new("snapshot.json").exists() {
+        let old_data = load_snapshot()?;
+        compare_snapshots(&new_data, &old_data);
+    } else {
+        println!("No snapshot found. Creating a new one.");
     }
 
-    for plugin in plugins {
+    save_snapshot(&new_data)?;
+
+    for plugin in new_data.plugins {
         process_plugin(&plugin).await?;
     }
 
     Ok(())
 }
 
-async fn fetch_plugins(url: &str) -> Result<Vec<Value>, Error> {
-    let response = reqwest::get(url).await?;
-    let response_body: Value = response.json().await?;
-
-    if let Some(plugins) = response_body["plugins"].as_array() {
-        Ok(plugins.clone())
-    } else {
-        eprintln!("Invalid response format: expected 'plugins' to be an array");
-        Ok(vec![])
-    }
-}
-
-async fn process_plugin(plugin: &Value) -> Result<(), Error> {
-    if let Some(download_link) = plugin["download_link"].as_str() {
+async fn process_plugin(plugin: &Plugin) -> Result<(), Error> {
+    if let Some(download_link) = &plugin.download_link {
         let data = download_plugin(download_link).await?;
         let reader = Cursor::new(data);
         let operations: Vec<Arc<dyn Operation + Send + Sync>> = vec![
@@ -192,19 +201,4 @@ fn initialize_parser() -> Parser {
         .set_language(&tree_sitter_php::language_php())
         .expect("Error loading PHP grammar");
     parser
-}
-
-#[tokio::main]
-async fn main() {
-    let stack_size = 128 * 1024 * 1024; // 128 MB
-    let builder = std::thread::Builder::new().stack_size(stack_size);
-    builder
-        .spawn(move || {
-            let url = "https://api.wordpress.org/plugins/info/1.2/?action=query_plugins";
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(get_plugin_info(url)).unwrap();
-        })
-        .unwrap()
-        .join()
-        .unwrap();
 }
