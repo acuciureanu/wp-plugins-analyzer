@@ -14,6 +14,7 @@ pub trait Operation {
             &self.args_checks(),
             &self.exclude_args_checks(),
             |func_name, args| self.format_log_message(func_name, args),
+            |tree, source_code, handler| self.check_nonce_in_handler(tree, source_code, handler),
         )
     }
 
@@ -46,18 +47,62 @@ pub trait Operation {
             )
         }
     }
+
+    fn check_nonce_in_handler(&self, tree: &Tree, source_code: &str, handler: &str) -> bool {
+        let handler_name = handler.split(',').nth(1).unwrap_or("").trim();
+        let query_str = format!(
+            r#"
+            (function_definition
+              name: (name) @function-name (#eq? @function-name "{}")
+              body: (compound_statement) @body)
+            "#,
+            handler_name
+        );
+
+        let query = match Query::new(&tree.language(), &query_str) {
+            Ok(query) => query,
+            Err(e) => {
+                eprintln!("Failed to create query: {:?}", e);
+                return false;
+            }
+        };
+
+        let mut cursor = QueryCursor::new();
+        let matches = cursor.matches(&query, tree.root_node(), source_code.as_bytes());
+
+        for m in matches {
+            for capture in m.captures {
+                if capture.index as u32 == query.capture_index_for_name("body").unwrap() {
+                    let body_node = capture.node;
+                    if self.contains_nonce_check(source_code, body_node) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    fn contains_nonce_check(&self, source_code: &str, body_node: tree_sitter::Node) -> bool {
+        let body_text = body_node.utf8_text(source_code.as_bytes()).unwrap_or("");
+        self.exclude_args_checks()
+            .iter()
+            .any(|check| body_text.contains(check))
+    }
 }
 
-pub fn check_for_function_calls<H>(
+pub fn check_for_function_calls<H, F>(
     tree: &Tree,
     source_code: &str,
     function_names: &[&str],
     arg_checks: &[&str],
     exclusion_arg_checks: &[&str],
     log_message: H,
+    check_nonce: F,
 ) -> OperationResult
 where
     H: Fn(&str, Vec<String>) -> String,
+    F: Fn(&Tree, &str, &str) -> bool,
 {
     let mut functions_to_check = HashMap::new();
     let mut log = Vec::new();
@@ -119,11 +164,22 @@ where
                 && !arguments.is_empty()
                 && !contains_exclusion
             {
-                functions_to_check.insert(function_name.clone(), arguments.clone());
-                log.push((
-                    function_name.clone(),
-                    log_message(&function_name, arguments),
-                ));
+                let handler_function_name = arguments.iter().find(|arg| arg.starts_with("["));
+                if let Some(handler) = handler_function_name {
+                    if !check_nonce(tree, source_code, handler) {
+                        functions_to_check.insert(function_name.clone(), arguments.clone());
+                        log.push((
+                            function_name.clone(),
+                            log_message(&function_name, arguments),
+                        ));
+                    }
+                } else {
+                    functions_to_check.insert(function_name.clone(), arguments.clone());
+                    log.push((
+                        function_name.clone(),
+                        log_message(&function_name, arguments),
+                    ));
+                }
             }
         }
     }

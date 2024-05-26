@@ -4,7 +4,6 @@ use operations::arbitrary_file_deletion_operation::ArbitraryFileDeletionOperatio
 use operations::arbitrary_file_read_operation::ArbitraryFileReadOperation;
 use operations::arbitrary_file_upload_operation::ArbitraryFileUploadOperation;
 use operations::broken_access_control_operation::BrokenAccessControlOperation;
-use operations::csrf_operation::CsrfOperation;
 use operations::csrf_to_xss_operation::CsrfToXssOperation;
 use operations::lfi_operation::LocalFileInclusionOperation;
 use operations::operation::Operation;
@@ -41,7 +40,6 @@ mod operations {
     pub mod arbitrary_file_read_operation;
     pub mod arbitrary_file_upload_operation;
     pub mod broken_access_control_operation;
-    pub mod csrf_operation;
     pub mod csrf_to_xss_operation;
     pub mod lfi_operation;
     pub mod operation;
@@ -81,7 +79,6 @@ async fn process_plugin(plugin: &Plugin) -> Result<(), Error> {
             Arc::new(ArbitraryFileReadOperation),
             Arc::new(ArbitraryFileUploadOperation),
             Arc::new(BrokenAccessControlOperation),
-            Arc::new(CsrfOperation),
             Arc::new(CsrfToXssOperation),
             Arc::new(LocalFileInclusionOperation),
             Arc::new(PhpObjectInjectionOperation),
