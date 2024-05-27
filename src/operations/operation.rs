@@ -1,8 +1,11 @@
 use std::collections::HashMap;
-use tree_sitter::{Query, QueryCursor, Tree};
+use tree_sitter::{Node, Query, QueryCursor, Tree};
 
-pub type OperationResult = (HashMap<String, Vec<String>>, Vec<(String, String)>);
+/// Result type for an operation, containing a map of functions to check
+/// and a log of function details.
+pub type OperationResult = (HashMap<String, Vec<String>>, Vec<(String, String, String)>);
 
+/// Trait representing an operation to be performed on the source code.
 pub trait Operation {
     fn name(&self) -> &str;
 
@@ -26,26 +29,7 @@ pub trait Operation {
     }
 
     fn format_log_message(&self, func_name: &str, args: Vec<String>) -> String {
-        let has_excluded_args = args.iter().any(|arg| {
-            self.exclude_args_checks()
-                .iter()
-                .any(|&check| arg.contains(check))
-        });
-        if has_excluded_args {
-            format!(
-                "Function: {} | Arguments: {} | No obvious {} vulnerability detected, but verify if proper security checks are in place.",
-                func_name,
-                args.join(", "),
-                self.name()
-            )
-        } else {
-            format!(
-                "Function: {} | Arguments: {} | Potential {} vulnerability: Missing Nonce Verification",
-                func_name,
-                args.join(", "),
-                self.name()
-            )
-        }
+        format!("Function: {}\nArguments: {:?}", func_name, args)
     }
 
     fn check_nonce_in_handler(&self, tree: &Tree, source_code: &str, handler: &str) -> bool {
@@ -59,38 +43,47 @@ pub trait Operation {
             handler_name
         );
 
-        let query = match Query::new(&tree.language(), &query_str) {
-            Ok(query) => query,
-            Err(e) => {
-                eprintln!("Failed to create query: {:?}", e);
-                return false;
-            }
-        };
-
-        let mut cursor = QueryCursor::new();
-        let matches = cursor.matches(&query, tree.root_node(), source_code.as_bytes());
-
-        for m in matches {
-            for capture in m.captures {
-                if capture.index as u32 == query.capture_index_for_name("body").unwrap() {
-                    let body_node = capture.node;
-                    if self.contains_nonce_check(source_code, body_node) {
-                        return true;
-                    }
-                }
-            }
-        }
-        false
+        query_and_check(tree, source_code, &query_str, |body_node| {
+            self.contains_nonce_check(source_code, body_node)
+        })
     }
 
-    fn contains_nonce_check(&self, source_code: &str, body_node: tree_sitter::Node) -> bool {
+    fn contains_nonce_check(&self, source_code: &str, body_node: Node) -> bool {
         let body_text = body_node.utf8_text(source_code.as_bytes()).unwrap_or("");
-        self.exclude_args_checks()
-            .iter()
-            .any(|check| body_text.contains(check))
+        self.exclude_args_checks().iter().any(|check| body_text.contains(check))
     }
 }
 
+/// Executes a query and checks if any node matches a given condition.
+fn query_and_check<F>(tree: &Tree, source_code: &str, query_str: &str, check: F) -> bool
+where
+    F: Fn(Node) -> bool,
+{
+    let query = match Query::new(&tree.language(), query_str) {
+        Ok(query) => query,
+        Err(e) => {
+            eprintln!("Failed to create query: {:?}", e);
+            return false;
+        }
+    };
+
+    let mut cursor = QueryCursor::new();
+    let matches = cursor.matches(&query, tree.root_node(), source_code.as_bytes());
+
+    for m in matches {
+        for capture in m.captures {
+            if capture.index == query.capture_index_for_name("body").unwrap() {
+                if check(capture.node) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
+}
+
+/// Checks for function calls in the source code and collects relevant information.
 pub fn check_for_function_calls<H, F>(
     tree: &Tree,
     source_code: &str,
@@ -126,63 +119,84 @@ where
     let matches = cursor.matches(&query, tree.root_node(), source_code.as_bytes());
 
     for m in matches {
-        let mut function_name = None;
-        let mut arguments = Vec::new();
-        let mut has_dangerous_input = false;
-
-        for capture in m.captures {
-            let node = capture.node;
-            let capture_name = &query.capture_names()[capture.index as usize];
-
-            match *capture_name {
-                "function-name" => {
-                    function_name = node.utf8_text(source_code.as_bytes()).ok();
-                }
-                "arguments" => {
-                    for i in 0..node.named_child_count() {
-                        if let Some(arg) = node.named_child(i) {
-                            if let Ok(arg_text) = arg.utf8_text(source_code.as_bytes()) {
-                                if arg_checks.iter().any(|&check| arg_text.contains(check)) {
-                                    has_dangerous_input = true;
-                                }
-                                arguments.push(arg_text.to_string());
-                            }
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
+        let (function_name, arguments) = parse_function_call(&query, m, source_code, arg_checks);
 
         if let Some(function_name) = function_name {
-            let function_name = function_name.to_string();
-            let contains_exclusion = exclusion_arg_checks
-                .iter()
-                .any(|&check| source_code.contains(check));
             if function_names.contains(&function_name.as_str())
-                && has_dangerous_input
                 && !arguments.is_empty()
-                && !contains_exclusion
+                && !contains_exclusion(source_code, exclusion_arg_checks)
             {
                 let handler_function_name = arguments.iter().find(|arg| arg.starts_with("["));
                 if let Some(handler) = handler_function_name {
                     if !check_nonce(tree, source_code, handler) {
-                        functions_to_check.insert(function_name.clone(), arguments.clone());
-                        log.push((
-                            function_name.clone(),
-                            log_message(&function_name, arguments),
-                        ));
+                        add_to_results(&mut functions_to_check, &mut log, function_name, &arguments, handler, &log_message);
                     }
                 } else {
-                    functions_to_check.insert(function_name.clone(), arguments.clone());
-                    log.push((
-                        function_name.clone(),
-                        log_message(&function_name, arguments),
-                    ));
+                    add_to_results(&mut functions_to_check, &mut log, function_name, &arguments, "", &log_message);
                 }
             }
         }
     }
 
     (functions_to_check, log)
+}
+
+/// Adds function details to the results and log.
+fn add_to_results<H>(
+    functions_to_check: &mut HashMap<String, Vec<String>>,
+    log: &mut Vec<(String, String, String)>,
+    function_name: String,
+    arguments: &Vec<String>,
+    handler: &str,
+    log_message: &H,
+) where
+    H: Fn(&str, Vec<String>) -> String,
+{
+    functions_to_check.insert(function_name.clone(), arguments.clone());
+    log.push((
+        function_name.clone(),
+        handler.to_string(),
+        log_message(&function_name, arguments.clone()),
+    ));
+}
+
+/// Parses a function call from a query match.
+fn parse_function_call(
+    query: &Query,
+    m: tree_sitter::QueryMatch,
+    source_code: &str,
+    arg_checks: &[&str],
+) -> (Option<String>, Vec<String>) {
+    let mut function_name = None;
+    let mut arguments = Vec::new();
+
+    for capture in m.captures {
+        let node = capture.node;
+        let capture_name = &query.capture_names()[capture.index as usize];
+
+        match *capture_name {
+            "function-name" => {
+                function_name = node.utf8_text(source_code.as_bytes()).ok();
+            }
+            "arguments" => {
+                for i in 0..node.named_child_count() {
+                    if let Some(arg) = node.named_child(i) {
+                        if let Ok(arg_text) = arg.utf8_text(source_code.as_bytes()) {
+                            if arg_checks.iter().any(|&check| arg_text.contains(check)) {
+                                arguments.push(arg_text.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    (function_name.map(String::from), arguments)
+}
+
+/// Checks if any exclusion arguments are present in the source code.
+fn contains_exclusion(source_code: &str, exclusion_arg_checks: &[&str]) -> bool {
+    exclusion_arg_checks.iter().any(|&check| source_code.contains(check))
 }

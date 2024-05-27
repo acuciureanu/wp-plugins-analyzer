@@ -27,25 +27,4 @@ impl Operation for CsrfToXssOperation {
             "check_ajax_referer",
         ]
     }
-
-    fn format_log_message(&self, func_name: &str, args: Vec<String>) -> String {
-        let has_exclusion_check = args.iter().any(|arg| {
-            self.exclude_args_checks()
-                .iter()
-                .any(|&check| arg.contains(check))
-        });
-
-        match has_exclusion_check {
-            true => format!(
-                "Function: {} | Arguments: {} | No obvious CSRF to Stored XSS vulnerability detected, but verify if proper security checks are in place.",
-                func_name,
-                args.join(", ")
-            ),
-            false => format!(
-                "Function: {} | Arguments: {} | Potential CSRF to Stored XSS vulnerability: Missing Nonce Verification",
-                func_name,
-                args.join(", ")
-            ),
-        }
-    }
 }

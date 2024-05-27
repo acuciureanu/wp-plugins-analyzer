@@ -170,7 +170,7 @@ async fn process_file(
             match handle.await {
                 Ok(result) => {
                     let (operation_name, log) = result;
-                    for (_, log_message) in log {
+                    for (_, _, log_message) in log {
                         let formatted_message = format!(
                             "File: {} | Operation: {} | {}",
                             file_name, operation_name, log_message
