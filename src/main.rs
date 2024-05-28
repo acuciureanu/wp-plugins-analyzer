@@ -1,17 +1,6 @@
 use api::client::{fetch_all_plugins, load_snapshot, save_snapshot};
 use models::plugin::Plugin;
-use operations::arbitrary_file_deletion_operation::ArbitraryFileDeletionOperation;
-use operations::arbitrary_file_read_operation::ArbitraryFileReadOperation;
-use operations::arbitrary_file_upload_operation::ArbitraryFileUploadOperation;
-use operations::broken_access_control_operation::BrokenAccessControlOperation;
-use operations::csrf_to_xss_operation::CsrfToXssOperation;
-use operations::lfi_operation::LocalFileInclusionOperation;
 use operations::operation::Operation;
-use operations::php_object_injection::PhpObjectInjectionOperation;
-use operations::privilege_escalation_operation::PrivilegeEscalationOperation;
-use operations::rce_operation::RemoteCodeExecutionOperation;
-use operations::sqli_operation::SqlInjectionOperation;
-use operations::ssrf_operation::ServerSideRequestForgeryOperation;
 use reqwest::Error;
 use std::borrow::Cow;
 use std::collections::HashSet;
@@ -36,18 +25,8 @@ mod utils {
 }
 
 mod operations {
-    pub mod arbitrary_file_deletion_operation;
-    pub mod arbitrary_file_read_operation;
-    pub mod arbitrary_file_upload_operation;
     pub mod broken_access_control_operation;
-    pub mod csrf_to_xss_operation;
-    pub mod lfi_operation;
     pub mod operation;
-    pub mod php_object_injection;
-    pub mod privilege_escalation_operation;
-    pub mod rce_operation;
-    pub mod sqli_operation;
-    pub mod ssrf_operation;
 }
 
 #[tokio::main]
@@ -75,17 +54,7 @@ async fn process_plugin(plugin: &Plugin) -> Result<(), Error> {
         let data = download_plugin(download_link).await?;
         let reader = Cursor::new(data);
         let operations: Vec<Arc<dyn Operation + Send + Sync>> = vec![
-            Arc::new(ArbitraryFileDeletionOperation),
-            Arc::new(ArbitraryFileReadOperation),
-            Arc::new(ArbitraryFileUploadOperation),
-            Arc::new(BrokenAccessControlOperation),
-            Arc::new(CsrfToXssOperation),
-            Arc::new(LocalFileInclusionOperation),
-            Arc::new(PhpObjectInjectionOperation),
-            Arc::new(PrivilegeEscalationOperation),
-            Arc::new(RemoteCodeExecutionOperation),
-            Arc::new(SqlInjectionOperation),
-            Arc::new(ServerSideRequestForgeryOperation),
+            
         ];
         process_archive(reader, &operations).await?;
     } else {
@@ -157,7 +126,7 @@ async fn process_file(
             let operation_name = operation.name().to_string();
 
             let handle = spawn_blocking(move || {
-                let (_, log) = operation.apply(&tree_clone, &source_code_clone);
+                let log = operation.apply(&tree_clone, &source_code_clone);
                 (operation_name, log)
             });
 
