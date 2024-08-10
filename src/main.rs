@@ -4,8 +4,10 @@ use operations::arbitrary_file_deletion_operation::ArbitraryFileDeletionOperatio
 use operations::arbitrary_file_read_operation::ArbitraryFileReadOperation;
 use operations::arbitrary_file_upload_operation::ArbitraryFileUploadOperation;
 use operations::broken_access_control_operation::BrokenAccessControlOperation;
+use operations::csrf_operation::CsrfOperation;
 use operations::csrf_to_xss_operation::CsrfToXssOperation;
 use operations::lfi_operation::LocalFileInclusionOperation;
+use operations::missing_capability_operation::MissingCapabilityCheckOperation;
 use operations::operation::Operation;
 use operations::php_object_injection::PhpObjectInjectionOperation;
 use operations::privilege_escalation_operation::PrivilegeEscalationOperation;
@@ -40,8 +42,10 @@ mod operations {
     pub mod arbitrary_file_read_operation;
     pub mod arbitrary_file_upload_operation;
     pub mod broken_access_control_operation;
+    pub mod csrf_operation;
     pub mod csrf_to_xss_operation;
     pub mod lfi_operation;
+    pub mod missing_capability_operation;
     pub mod operation;
     pub mod php_object_injection;
     pub mod privilege_escalation_operation;
@@ -86,6 +90,8 @@ async fn process_plugin(plugin: &Plugin) -> Result<(), Error> {
             Arc::new(RemoteCodeExecutionOperation),
             Arc::new(SqlInjectionOperation),
             Arc::new(ServerSideRequestForgeryOperation),
+            Arc::new(MissingCapabilityCheckOperation),
+            Arc::new(CsrfOperation),
         ];
         process_archive(reader, &operations).await?;
     } else {

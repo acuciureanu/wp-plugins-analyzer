@@ -1,4 +1,4 @@
-use crate::operations::operation::Operation;
+use super::operation::Operation;
 
 pub struct CsrfOperation;
 
@@ -12,41 +12,30 @@ impl Operation for CsrfOperation {
     }
 
     fn args_checks(&self) -> Vec<&'static str> {
-        vec!["init", "admin_init", "wp_ajax_"]
+        vec!["admin_post_", "wp_ajax_"]
     }
 
     fn exclude_args_checks(&self) -> Vec<&'static str> {
-        vec![
-            "wp_verify_nonce",
-            "check_admin_referer",
-            "check_ajax_referer",
-        ]
+        vec!["wp_verify_nonce", "check_admin_referer", "check_ajax_referer"]
     }
 
-    fn format_log_message(&self, func_name: &str, args: Vec<String>) -> String {
-        let has_exclusion_check = args.iter().any(|arg| {
-            self.exclude_args_checks()
-                .iter()
-                .any(|&check| arg.contains(check))
-        });
+    fn hooks_checks(&self) -> Vec<&'static str> {
+        vec!["admin_post_", "wp_ajax_"]
+    }
 
-        match has_exclusion_check {
-            true => {
+    fn format_log_message(&self) -> Box<super::operation::LogMessageFormatter> {
+        Box::new(move |func_name, args| {
+            if func_name == "add_action" {
                 format!(
-                    "Function: {} | Arguments: {} | No obvious {} vulnerability detected, but verify if proper security checks are in place.",
-                    func_name,
-                    args.join(", "),
-                    self.name()
+                    "Potential CSRF vulnerability: Hook '{}' registered. Ensure proper nonce verification in the callback function.",
+                    args[0]
+                )
+            } else {
+                format!(
+                    "Potential CSRF vulnerability: Function '{}' called. Ensure proper nonce verification.",
+                    func_name
                 )
             }
-            false => {
-                format!(
-                        "Function: {} | Arguments: {} | Potential {} vulnerability: Missing Nonce Verification",
-                        func_name,
-                        args.join(", "),
-                        self.name()
-                    )
-            }
-        }
+        })
     }
 }

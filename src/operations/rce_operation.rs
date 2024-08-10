@@ -8,19 +8,23 @@ impl Operation for RemoteCodeExecutionOperation {
     }
 
     fn functions_checks(&self) -> Vec<&'static str> {
-        vec![
-            "exec",
-            "shell_exec",
-            "system",
-            "passthru",
-            "proc_open",
-            "eval",
-            "call_user_func",
-            "call_user_func_array",
-        ]
+        vec!["eval", "create_function", "assert", "system", "exec", "shell_exec", "passthru", "popen"]
     }
 
     fn args_checks(&self) -> Vec<&'static str> {
-        vec!["$_GET", "$_POST", "$_REQUEST"]
+        vec!["$_GET", "$_POST", "$_REQUEST", "$_COOKIE"]
+    }
+
+    fn exclude_args_checks(&self) -> Vec<&'static str> {
+        vec!["sanitize_text_field", "escapeshellarg", "escapeshellcmd"]
+    }
+
+    fn format_log_message(&self) -> Box<super::operation::LogMessageFormatter> {
+        Box::new(move |func_name, args| {
+            format!(
+                "Critical: Potential remote code execution: Function '{}' with user input: {:?}. Avoid using these functions with user input.",
+                func_name, args
+            )
+        })
     }
 }

@@ -1,4 +1,4 @@
-use crate::operations::operation::Operation;
+use super::operation::Operation;
 
 pub struct ArbitraryFileUploadOperation;
 
@@ -10,22 +10,25 @@ impl Operation for ArbitraryFileUploadOperation {
     fn functions_checks(&self) -> Vec<&'static str> {
         vec![
             "move_uploaded_file",
-            "file_put_contents",
-            "fwrite",
-            "fputs",
-            "copy",
-            "fputcsv",
-            "rename",
+            "wp_handle_upload",
             "WP_Filesystem_Direct::put_contents",
-            "WP_Filesystem_Direct::move",
-            "WP_Filesystem_Direct::copy",
-            "ZipArchive::extractTo",
-            "PharData::extractTo",
-            "unzip_file",
         ]
     }
 
     fn args_checks(&self) -> Vec<&'static str> {
-        vec!["$_FILES", "get_file_params"]
+        vec!["$_FILES"]
+    }
+
+    fn exclude_args_checks(&self) -> Vec<&'static str> {
+        vec!["wp_verify_nonce", "current_user_can", "wp_check_filetype_and_ext"]
+    }
+
+    fn format_log_message(&self) -> Box<super::operation::LogMessageFormatter> {
+        Box::new(move |func_name, args| {
+            format!(
+                "Potential arbitrary file upload: Function '{}' handling uploaded file: {:?}. Ensure proper file type validation and user permissions.",
+                func_name, args
+            )
+        })
     }
 }

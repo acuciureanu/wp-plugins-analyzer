@@ -1,4 +1,4 @@
-use super::operation::{LogMessageFormatter, Operation};
+use super::operation::Operation;
 
 pub struct BrokenAccessControlOperation;
 
@@ -8,55 +8,34 @@ impl Operation for BrokenAccessControlOperation {
     }
 
     fn functions_checks(&self) -> Vec<&'static str> {
-        vec![
-            "add_action",
-            "update_option",
-            "register_rest_route",
-            "check_if_update",
-        ]
+        vec!["add_action", "register_rest_route"]
     }
 
     fn args_checks(&self) -> Vec<&'static str> {
-        vec![
-            "wp_verify_nonce",
-            "check_admin_referer",
-            "check_ajax_referer",
-            "sanitize_text_field",
-        ]
+        vec!["wp_ajax_", "admin_post_", "rest_api_init"]
     }
 
-    fn format_log_message(&self) -> Box<LogMessageFormatter> {
+    fn exclude_args_checks(&self) -> Vec<&'static str> {
+        vec!["current_user_can", "wp_verify_nonce", "check_admin_referer", "check_ajax_referer"]
+    }
+
+    fn hooks_checks(&self) -> Vec<&'static str> {
+        vec!["wp_ajax_", "admin_post_", "rest_api_init"]
+    }
+
+    fn format_log_message(&self) -> Box<super::operation::LogMessageFormatter> {
         Box::new(move |func_name, args| {
-            let body = args.join(" ");
-
-            let missing_checks = [("current_user_can", "Permission Check"),
-                ("wp_verify_nonce", "Nonce Verification"),
-                ("check_admin_referer", "Admin Referer Check"),
-                ("check_ajax_referer", "AJAX Referer Check")];
-
-            let missing_checks: Vec<&str> = missing_checks
-                .iter()
-                .filter(|(check, _)| !body.contains(check))
-                .map(|(_, desc)| *desc)
-                .collect();
-
-            if missing_checks.is_empty() {
-                format!(
-                    "Function: {} | Arguments: {} | No obvious {} vulnerability detected, but verify if proper security checks are in place.",
-                    func_name,
-                    args.join(", "),
-                    self.name()
-                )
-            } else {
-                format!(
-                    "Function: {} | Arguments: {} | Potential {} vulnerability: Missing {}",
-                    func_name,
-                    args.join(", "),
-                    self.name(),
-                    missing_checks.join(", ")
+            match func_name {
+                "add_action" => format!(
+                    "Potential broken access control: Hook '{}' registered. Verify proper capability checks in the callback function.",
+                    args[0]
+                ),
+                "register_rest_route" => "Potential broken access control: REST API route registered. Ensure proper permission_callback is implemented.".to_string(),
+                _ => format!(
+                    "Potential broken access control: Function '{}' called. Verify proper capability checks.",
+                    func_name
                 )
             }
         })
     }
-    
 }
