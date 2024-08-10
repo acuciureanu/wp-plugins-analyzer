@@ -1,4 +1,4 @@
-use super::operation::Operation;
+use super::operation::{LogMessageFormatter, Operation};
 
 pub struct BrokenAccessControlOperation;
 
@@ -25,37 +25,38 @@ impl Operation for BrokenAccessControlOperation {
         ]
     }
 
-    fn format_log_message(&self, func_name: &str, args: Vec<String>) -> String {
-        let body = args.join(" ");  // Concatenate args to simulate a function body for missing checks
+    fn format_log_message(&self) -> Box<LogMessageFormatter> {
+        Box::new(move |func_name, args| {
+            let body = args.join(" ");
 
-        let missing_checks = vec![
-            ("current_user_can", "Permission Check"),
-            ("wp_verify_nonce", "Nonce Verification"),
-            ("check_admin_referer", "Admin Referer Check"),
-            ("check_ajax_referer", "AJAX Referer Check"),
-        ];
+            let missing_checks = [("current_user_can", "Permission Check"),
+                ("wp_verify_nonce", "Nonce Verification"),
+                ("check_admin_referer", "Admin Referer Check"),
+                ("check_ajax_referer", "AJAX Referer Check")];
 
-        let missing_checks: Vec<&str> = missing_checks
-            .iter()
-            .filter(|(check, _)| !body.contains(check))
-            .map(|(_, desc)| *desc)
-            .collect();
+            let missing_checks: Vec<&str> = missing_checks
+                .iter()
+                .filter(|(check, _)| !body.contains(check))
+                .map(|(_, desc)| *desc)
+                .collect();
 
-        if missing_checks.is_empty() {
-            format!(
-                "Function: {} | Arguments: {} | No obvious {} vulnerability detected, but verify if proper security checks are in place.",
-                func_name,
-                args.join(", "),
-                self.name()
-            )
-        } else {
-            format!(
-                "Function: {} | Arguments: {} | Potential {} vulnerability: Missing {}",
-                func_name,
-                args.join(", "),
-                self.name(),
-                missing_checks.join(", ")
-            )
-        }
+            if missing_checks.is_empty() {
+                format!(
+                    "Function: {} | Arguments: {} | No obvious {} vulnerability detected, but verify if proper security checks are in place.",
+                    func_name,
+                    args.join(", "),
+                    self.name()
+                )
+            } else {
+                format!(
+                    "Function: {} | Arguments: {} | Potential {} vulnerability: Missing {}",
+                    func_name,
+                    args.join(", "),
+                    self.name(),
+                    missing_checks.join(", ")
+                )
+            }
+        })
     }
+    
 }
