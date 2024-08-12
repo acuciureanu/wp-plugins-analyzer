@@ -1,4 +1,5 @@
-﻿# 🔍 WordPress Plugin Analyzer ⚠️ Work in Progress ⚠️
+⚠️ Work in Progress ⚠️
+ # 🔍 WordPress Plugin Analyzer️
 
 ## 🌟 Overview
 
