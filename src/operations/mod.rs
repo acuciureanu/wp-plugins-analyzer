@@ -1,0 +1,15 @@
+pub mod arbitrary_file_deletion_operation;
+pub mod arbitrary_file_read_operation;
+pub mod arbitrary_file_upload_operation;
+pub mod broken_access_control_operation;
+pub mod csrf_operation;
+pub mod csrf_to_xss_operation;
+pub mod lfi_operation;
+pub mod missing_capability_operation;
+pub mod operation;
+pub mod owasp;
+pub mod php_object_injection;
+pub mod privilege_escalation_operation;
+pub mod rce_operation;
+pub mod sqli_operation;
+pub mod ssrf_operation;

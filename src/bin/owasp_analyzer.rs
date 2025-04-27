@@ -1,19 +1,13 @@
-use api::client::{fetch_all_plugins, load_snapshot, save_snapshot};
-use models::plugin::Plugin;
-use operations::arbitrary_file_deletion_operation::ArbitraryFileDeletionOperation;
-use operations::arbitrary_file_read_operation::ArbitraryFileReadOperation;
-use operations::arbitrary_file_upload_operation::ArbitraryFileUploadOperation;
-use operations::broken_access_control_operation::BrokenAccessControlOperation;
-use operations::csrf_operation::CsrfOperation;
-use operations::csrf_to_xss_operation::CsrfToXssOperation;
-use operations::lfi_operation::LocalFileInclusionOperation;
-use operations::missing_capability_operation::MissingCapabilityCheckOperation;
-use operations::operation::Operation;
-use operations::php_object_injection::PhpObjectInjectionOperation;
-use operations::privilege_escalation_operation::PrivilegeEscalationOperation;
-use operations::rce_operation::RemoteCodeExecutionOperation;
-use operations::sqli_operation::SqlInjectionOperation;
-use operations::ssrf_operation::ServerSideRequestForgeryOperation;
+use wp_plugins_analyzer::api::client::{fetch_all_plugins, load_snapshot, save_snapshot};
+use wp_plugins_analyzer::models::plugin::Plugin;
+use wp_plugins_analyzer::operations::operation::Operation;
+use wp_plugins_analyzer::operations::owasp::{
+    InjectionOperation,
+    OWASPBrokenAccessControlOperation,
+    CryptoFailuresOperation,
+    InsecureDesignOperation,
+    SecurityMisconfigOperation,
+};
 use reqwest::Error;
 use std::borrow::Cow;
 use std::collections::HashSet;
@@ -22,40 +16,21 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::task::spawn_blocking;
 use tree_sitter::Parser;
-use utils::comparator::compare_snapshots;
+use wp_plugins_analyzer::utils::comparator::compare_snapshots;
 use zip::ZipArchive;
-
-mod api {
-    pub mod client;
-}
-
-mod models {
-    pub mod plugin;
-}
-
-mod utils {
-    pub mod comparator;
-}
-
-mod operations {
-    pub mod arbitrary_file_deletion_operation;
-    pub mod arbitrary_file_read_operation;
-    pub mod arbitrary_file_upload_operation;
-    pub mod broken_access_control_operation;
-    pub mod csrf_operation;
-    pub mod csrf_to_xss_operation;
-    pub mod lfi_operation;
-    pub mod missing_capability_operation;
-    pub mod operation;
-    pub mod php_object_injection;
-    pub mod privilege_escalation_operation;
-    pub mod rce_operation;
-    pub mod sqli_operation;
-    pub mod ssrf_operation;
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("🔍 OWASP Top 5 WordPress Plugin Security Analyzer");
+    println!("=================================================");
+    println!("Analyzing plugins for the following vulnerabilities:");
+    println!("1. Injection (SQL Injection, XSS)");
+    println!("2. Broken Access Control");
+    println!("3. Cryptographic Failures");
+    println!("4. Insecure Design");
+    println!("5. Security Misconfiguration");
+    println!("=================================================\n");
+
     let new_data = fetch_all_plugins().await?;
 
     if Path::new("snapshot.json").exists() {
@@ -67,86 +42,114 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     save_snapshot(&new_data)?;
 
+    let mut total_plugins = 0;
+    let mut plugins_with_vulnerabilities = 0;
+    let mut total_vulnerabilities = 0;
+
     for plugin in new_data.plugins {
-        process_plugin(&plugin).await?;
+        total_plugins += 1;
+        let result = process_plugin(&plugin).await;
+        match result {
+            Ok(vulnerability_count) => {
+                if vulnerability_count > 0 {
+                    plugins_with_vulnerabilities += 1;
+                    total_vulnerabilities += vulnerability_count;
+                }
+            }
+            Err(e) => {
+                eprintln!("Error processing plugin {}: {:?}", plugin.name, e);
+            }
+        }
     }
+
+    println!("\n=================================================");
+    println!("Analysis Summary:");
+    println!("Total plugins analyzed: {}", total_plugins);
+    println!("Plugins with vulnerabilities: {}", plugins_with_vulnerabilities);
+    println!("Total vulnerabilities found: {}", total_vulnerabilities);
+    println!("=================================================");
 
     Ok(())
 }
 
-async fn process_plugin(plugin: &Plugin) -> Result<(), Error> {
+async fn process_plugin(plugin: &Plugin) -> Result<usize, Error> {
+    let mut vulnerability_count = 0;
+    
     if let Some(download_link) = &plugin.download_link {
+        println!("Analyzing plugin: {} ({})", plugin.name, plugin.version);
+        
         let data = download_plugin(download_link).await?;
         let reader = Cursor::new(data);
+        
+        // Create OWASP operations
         let operations: Vec<Arc<dyn Operation + Send + Sync>> = vec![
-            Arc::new(ArbitraryFileDeletionOperation),
-            Arc::new(ArbitraryFileReadOperation),
-            Arc::new(ArbitraryFileUploadOperation),
-            Arc::new(BrokenAccessControlOperation),
-            Arc::new(CsrfToXssOperation),
-            Arc::new(LocalFileInclusionOperation),
-            Arc::new(PhpObjectInjectionOperation),
-            Arc::new(PrivilegeEscalationOperation),
-            Arc::new(RemoteCodeExecutionOperation),
-            Arc::new(SqlInjectionOperation),
-            Arc::new(ServerSideRequestForgeryOperation),
-            Arc::new(MissingCapabilityCheckOperation),
-            Arc::new(CsrfOperation),
+            Arc::new(InjectionOperation),
+            Arc::new(OWASPBrokenAccessControlOperation),
+            Arc::new(CryptoFailuresOperation),
+            Arc::new(InsecureDesignOperation),
+            Arc::new(SecurityMisconfigOperation),
         ];
-        process_archive(reader, &operations).await?;
+        
+        vulnerability_count = process_archive(reader, &operations, &plugin.name).await?;
     } else {
         eprintln!("Download link not found for plugin: {:?}", plugin);
     }
 
-    Ok(())
+    Ok(vulnerability_count)
 }
 
 async fn download_plugin(download_link: &str) -> Result<Vec<u8>, Error> {
     let data_response = reqwest::get(download_link).await?;
     let data = data_response.bytes().await?;
-    println!("Download finished for plugin: {}", download_link);
     Ok(data.to_vec())
 }
 
 async fn process_archive(
     reader: Cursor<Vec<u8>>,
     operations: &[Arc<dyn Operation + Send + Sync>],
-) -> Result<(), Error> {
+    plugin_name: &str,
+) -> Result<usize, Error> {
     let mut archive = match ZipArchive::new(reader) {
         Ok(archive) => archive,
         Err(e) => {
-            eprintln!("Failed to read ZIP archive: {:?}", e);
-            return Ok(());
+            eprintln!("Failed to read ZIP archive for {}: {:?}", plugin_name, e);
+            return Ok(0);
         }
     };
+
+    let mut vulnerability_count = 0;
 
     for i in 0..archive.len() {
         let file = match archive.by_index(i) {
             Ok(file) => file,
             Err(e) => {
-                eprintln!("Failed to access file at index {}: {:?}", i, e);
+                eprintln!("Failed to access file at index {} for {}: {:?}", i, plugin_name, e);
                 continue;
             }
         };
 
         if file.is_file() && file.name().ends_with(".php") {
-            process_file(file, operations).await?;
+            let count = process_file(file, operations, plugin_name).await?;
+            vulnerability_count += count;
         }
     }
 
-    Ok(())
+    Ok(vulnerability_count)
 }
 
 async fn process_file(
     mut file: zip::read::ZipFile<'_, std::io::Cursor<Vec<u8>>>,
     operations: &[Arc<dyn Operation + Send + Sync>],
-) -> Result<(), Error> {
+    plugin_name: &str,
+) -> Result<usize, Error> {
     let file_name = file.name().to_string();
+    let mut vulnerability_count = 0;
+    
     if file_name.ends_with(".php") {
         let mut buffer = Vec::new();
         if let Err(e) = file.read_to_end(&mut buffer) {
-            eprintln!("Failed to read PHP file {}: {:?}", file_name, e);
-            return Ok(());
+            eprintln!("Failed to read PHP file {} in {}: {:?}", file_name, plugin_name, e);
+            return Ok(0);
         }
 
         let source_code = Arc::new(String::from_utf8_lossy(&buffer).to_string());
@@ -178,13 +181,14 @@ async fn process_file(
                     let (operation_name, log) = result;
                     for (_, _, log_message) in log {
                         let formatted_message = format!(
-                            "File: {} | Operation: {} | {}",
-                            file_name, operation_name, log_message
+                            "Plugin: {} | File: {} | Operation: {} | {}",
+                            plugin_name, file_name, operation_name, log_message
                         );
                         if !log_message.is_empty()
                             && unique_results.insert(formatted_message.clone())
                         {
                             println!("{}", formatted_message);
+                            vulnerability_count += 1;
                         }
                     }
                 }
@@ -195,7 +199,7 @@ async fn process_file(
         }
     }
 
-    Ok(())
+    Ok(vulnerability_count)
 }
 
 fn initialize_parser() -> Parser {

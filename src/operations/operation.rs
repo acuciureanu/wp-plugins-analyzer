@@ -3,7 +3,7 @@ use tree_sitter::{Query, QueryCursor, Tree};
 
 pub type OperationResult = (HashMap<String, Vec<String>>, Vec<(String, String, String)>);
 pub type LogMessageFormatter<'a> = dyn Fn(&str, Vec<String>) -> String + 'a;
-type NonceChecker<'a> = dyn Fn(&Tree, &str, &str) -> bool + 'a;
+pub type NonceChecker<'a> = dyn Fn(&Tree, &str, &str) -> bool + 'a;
 
 pub struct FunctionCallParams<'a, H, F>
 where
@@ -46,7 +46,7 @@ pub trait Operation {
         Box::new(|func_name, args| format!("Function: {} | Arguments: {:?}", func_name, args))
     }
 
-    fn check_nonce_in_handler(&self) -> Box<NonceChecker> {
+    fn check_nonce_in_handler(&self) -> Box<NonceChecker<'_>> {
         Box::new(move |_tree, _source_code, _handler| false)
     }
 }
